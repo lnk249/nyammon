@@ -398,6 +398,12 @@ nav.bottom button.coach span{background:var(--warm-yellow);animation:coach 1.1s 
 
 /* v12: 방문자 수 */
 .visitfoot{text-align:center;font-size:14px;color:var(--sub);padding:8px 16px 4px;font-variant-numeric:tabular-nums}
+
+/* v13: 쿠폰 기한 */
+.cp-time{margin:8px 0 0;font-size:15px;color:var(--accent-orange,#E8590C);font-weight:600}
+.coupon.expired{opacity:.55;filter:grayscale(1)}
+.coupon.expired strong{text-decoration:line-through}
+.cp-time.dead{color:var(--sub)}
 </style>
 </head>
 <body>
@@ -615,7 +621,12 @@ const BOSSES=[
  {n:'암석거인 헉헉바위곤',e:'⛰️',weak:3,where:'언덕 동네',line:'끝이 안 보이는 오르막이 앞을 막아요!',desc:'언덕 동네의 끝없는 오르막이 깨어난 바위 거인. 오르는 사람의 숨을 헉헉 차게 해요. 든든한 대지 속성 힘으로 밀어붙여야 해요.'},
  {n:'암흑망령 깜깜레이스',e:'🌃',weak:4,where:'정전된 밤',line:'골목이 깜깜해 길이 안 보여요!',desc:'정전된 골목에 사는 그림자 망령. 가로등을 꺼뜨려 길을 잃게 만들어요. 반짝이는 빛 속성에 약해요.'},
  {n:'섬광마수 번쩍헬름',e:'🚧',weak:5,where:'공사 구간',line:'번쩍! 조명이 너무 눈부셔요!',desc:'공사장 조명을 뒤집어쓴 안전모 마수. 눈부신 빛으로 앞을 못 보게 해요. 빛을 삼키는 어둠 속성에 약해요.'}];
-const COUPON={1:10,2:15,3:30};          // 보스 클리어 쿠폰(%) · 팀에서 확정 시 이 줄만 바꾸면 됨
+const COUPON={1:10,2:15,3:30};
+/* v13: 보스 쿠폰은 받은 날 24시(자정)까지만 사용 가능 */
+const endOfToday=()=>{const d=new Date();d.setHours(23,59,59,999);return d.getTime();};
+const isBossCp=c=>c.t.startsWith('배달');
+const cpValid=c=>!isBossCp(c)||(c.day===state.dayNo&&(!c.exp||Date.now()<=c.exp));
+const cpLeft=c=>{const m=Math.max(0,Math.floor(((c.exp||endOfToday())-Date.now())/60000)),h=Math.floor(m/60);return h?`${h}시간 ${m%60}분 남음`:`${m}분 남음`;};          // 보스 클리어 쿠폰(%) · 팀에서 확정 시 이 줄만 바꾸면 됨
 const BMART=[[10,5],[20,10],[30,15]];   // 도감 개수 → B마트 할인(%)
 const DAYS=['월','화','수','목','금','토','일'];
 
@@ -875,7 +886,7 @@ function boss(){
    <div class="row center">${b(`기본 공격 (${state.stage})`,'hit')}${b(skillLabel+(fight.used?' · 사용함':''),'skill','',fight.used?'disabled':'class="primary"')}</div>
    ${fight.log?`<p class="sub" style="margin-top:10px">${fight.log}</p>`:''}</section>`;
  }
- return `<section><h1>배달 방해 보스</h1><p class="sub">높은 단계일수록 쉽게 깨고 쿠폰이 커져요 (1단계 ${COUPON[1]}% · 2단계 ${COUPON[2]}% · 3단계 ${COUPON[3]}%, 하루 1회). 이기면 지금 냠몬이 도감에 기록돼요. 오늘의 보스부터 도전해 보세요!</p></section>
+ return `<section><h1>배달 방해 보스</h1><p class="sub">높은 단계일수록 쉽게 깨고 쿠폰이 커져요 (1단계 ${COUPON[1]}% · 2단계 ${COUPON[2]}% · 3단계 ${COUPON[3]}%, 하루 1회, 받은 날 24시까지 사용). 이기면 지금 냠몬이 도감에 기록돼요. 오늘의 보스부터 도전해 보세요!</p></section>
  ${BOSSES.map((B,i)=>`<section class="boss-card">${bossImg(i,'sm',B.n)}<div class="grow"><h3 style="margin:0">${B.n}${i===weekBoss?`<span class="badge">${situ().t!=null?'오늘의 보스':'이번 주'}</span>`:''}</h3><p class="sub" style="margin:2px 0 8px">약점 ${T[B.weak].e} ${T[B.weak].n}${types.includes(B.weak)?' · 내 냠몬 유리!':''}</p><div class="row">${b('⚔️ 도전','fight',i,i===weekBoss?'class="primary"':'')}${b('특성 보기','bossview',i)}</div></div></section>`).join('')}`;
 }
 
@@ -894,9 +905,13 @@ function dex(){
 }
 
 function coupon(){
- return `<section><h1>쿠폰함</h1><p class="sub">시연용 쿠폰이에요. 실제로 사용할 수 없어요.</p></section>
- ${state.coupons.length?state.coupons.map(c=>`<section class="coupon"><strong>${c.t}</strong><p class="sub" style="margin:4px 0 0">${c.d} · ${c.day}일차</p></section>`).join(''):`<section><p>아직 쿠폰이 없어요. 보스를 깨거나 도감을 10개 채워 보세요.</p>${b('보스전 가기','tab','boss','class="primary"')}</section>`}`;
+ const live=state.coupons.filter(cpValid),dead=state.coupons.filter(c=>!cpValid(c)).slice(0,5);
+ const card=(c,ok)=>`<section class="coupon${ok?'':' expired'}"><strong>${c.t}</strong><p class="sub" style="margin:4px 0 0">${c.d} · ${c.day}일차</p>${isBossCp(c)?(ok?`<p class="cp-time">⏰ 오늘 24시까지 · ${cpLeft(c)}</p>`:`<p class="cp-time dead">기한 만료 · 받은 날 24시가 지났어요</p>`):`<p class="sub" style="margin:4px 0 0">사용 기한 없음</p>`}</section>`;
+ return `<section><h1>쿠폰함</h1><p class="sub" style="margin:0">보스 돌파 쿠폰은 <b>받은 날 24시(자정)까지만</b> 쓸 수 있어요. 도감 보상 B마트 쿠폰은 기한이 없어요.</p></section>
+ ${live.length?live.map(c=>card(c,true)).join(''):`<section><p>사용할 수 있는 쿠폰이 없어요. 보스를 깨거나 도감을 10개 채워 보세요.</p>${b('보스전 가기','tab','boss','class="primary"')}</section>`}
+ ${dead.length?`<h3 style="margin:18px 4px 8px;color:var(--sub)">기한이 지난 쿠폰</h3>${dead.map(c=>card(c,false)).join('')}`:''}`;
 }
+
 
 /* ---------- 근처 가게 · 주문 연결 (시연) ---------- */
 const PRE=['냠냠','골목','동네','원조','한밤'];
@@ -909,14 +924,14 @@ function storesPage(){
  <section><a class="btn" target="_blank" rel="noopener noreferrer" href="https://map.naver.com/p/search/${encodeURIComponent(m[0])}">지도에서 실제 매장 찾아보기 ↗</a></section>`;
 }
 function confirmHtml(){
- const i=storeMenu,s=storesFor(i)[storeSel],m=MENUS[i],left=2-state.daily.orders,cp=state.coupons.find(c=>c.t.startsWith('배달'));
+ const i=storeMenu,s=storesFor(i)[storeSel],m=MENUS[i],left=2-state.daily.orders,cp=state.coupons.find(c=>isBossCp(c)&&cpValid(c));
  const tip=3000,pct=cp?+(cp.t.match(/(\d+)%/)||[0,0])[1]:0,disc=Math.round(s.price*pct/100/100)*100,total=s.price+tip-disc,won=v=>v.toLocaleString()+'원';
  return `<div class="sheet"><div class="in"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">주문 확인</h2>${b('닫기','storeclose')}</div>
   <div class="paper-receipt">
    <div class="receipt-header"><strong style="font-size:17px">${s.n}</strong><small>주문서 · 시연용</small></div>
    <div class="rline"><span>${m[0]} × 1</span><span>${won(s.price)}</span></div>
    <div class="rline"><span>배달팁 (예시)</span><span>${won(tip)}</span></div>
-   ${cp?`<div class="rline coupon-line"><span>🎟️ ${cp.t} 쿠폰</span><span>-${won(disc)}</span></div>`:''}
+   ${cp?`<div class="rline coupon-line"><span>🎟️ ${cp.t} 쿠폰 <small>(오늘 24시까지)</small></span><span>-${won(disc)}</span></div>`:''}
    <div class="rline total"><span>결제 예정 금액</span><span>${won(total)}</span></div>
    <div class="rline bonus"><span>냠몬 보너스</span><span>${left>0?`${T[mainType(i)].e} 속성 크게 + 성장 15`:'오늘은 다 받았어요'}</span></div>
   </div>
@@ -999,7 +1014,7 @@ function nextAction(){
  if(!d.pick)return {ic:'🍜',t:'먹고 싶은 메뉴 3개를 고르면 젤리를 받아요.',btn:'메뉴 고르러 가기',act:'tab',val:'menu'};
  if(!d.browse)return {ic:'👀',t:'메뉴 하나를 눌러 5초 구경하면 젤리 1개!',btn:'메뉴 구경하러 가기',act:'tab',val:'menu'};
  if(!d.boss)return {ic:'⚔️',t:`보스를 이기면 ${COUPON[state.stage]}% 할인 쿠폰을 받아요.`,btn:'보스전 하러 가기',act:'tab',val:'boss'};
- if(d.orders<2)return {ic:'🛵',t:'주문하면 속성이 크게 오르고 성장 +15!',btn:'메뉴 주문하러 가기',act:'tab',val:'menu'};
+ if(d.orders<2){const cp=state.coupons.find(c=>isBossCp(c)&&cpValid(c));return cp?{ic:'⏰',t:`${cp.t} 쿠폰이 오늘 24시에 사라져요! (${cpLeft(cp)})`,btn:'쿠폰 쓰러 가기',act:'tab',val:'menu'}:{ic:'🛵',t:'주문하면 속성이 크게 오르고 성장 +15!',btn:'메뉴 주문하러 가기',act:'tab',val:'menu'};}
  return {ic:'🎉',t:'오늘 할 일을 모두 끝냈어요! 친구에게 냠몬을 자랑해 볼까요?',btn:'냠몬 자랑하기',act:'shareopen'};
 }
 function todoCard(){
@@ -1195,7 +1210,7 @@ document.addEventListener('click',e=>{
   case 'storepick':storeSel=i;break;
   case 'storeclose':storeSel=null;break;
   case 'gopay':{
-   if(redirect||storeMenu==null)break;redirect=true;const mi=storeMenu,sn=storesFor(mi)[storeSel].n,ci=state.coupons.findIndex(c=>c.t.startsWith('배달'));
+   if(redirect||storeMenu==null)break;redirect=true;const mi=storeMenu,sn=storesFor(mi)[storeSel].n,ci=state.coupons.findIndex(c=>isBossCp(c)&&cpValid(c));
    setTimeout(()=>{redirect=false;storeSel=null;storeMenu=null;page='home';let used='';if(ci>=0){used=state.coupons[ci].t;state.coupons.splice(ci,1);}doOrder(mi,sn+(used?` · ${used} 쿠폰 사용`:''));save();render();window.scrollTo(0,0);},1700);
    break;}
   case 'fight':if(state.stage===0)break;fight={b:i,turn:1,hp:10,used:false,log:''};break;
@@ -1206,7 +1221,7 @@ document.addEventListener('click',e=>{
    fight.hp=Math.max(0,fight.hp-dmg);fight.log=`${act==='skill'?'스킬':'기본 공격'}! 피해 ${dmg}`;
    if(fight.hp===0){
     const f=current();const added=addDex(f.id);const firstWin=!state.bossLog[fight.b];if(firstWin)state.bossLog[fight.b]={wins:1,first:state.dayNo};else state.bossLog[fight.b].wins++;let msg=`${B.n} 돌파!${firstWin?' 보스 도감 기록 ·':''}`;
-    if(!state.daily.boss){state.daily.boss=true;state.coupons.unshift({t:`배달 ${COUPON[state.stage]}% 할인`,d:`${B.n} 돌파 보상 · ${state.stage}단계 클리어`,day:state.dayNo});msg+=` ${COUPON[state.stage]}% 쿠폰 획득`;}else msg+=' (오늘 쿠폰은 이미 받았어요)';
+    if(!state.daily.boss){state.daily.boss=true;state.coupons.unshift({t:`배달 ${COUPON[state.stage]}% 할인`,d:`${B.n} 돌파 보상 · ${state.stage}단계 클리어`,day:state.dayNo,exp:endOfToday()});msg+=` ${COUPON[state.stage]}% 쿠폰 획득 (오늘 24시까지)`;}else msg+=' (오늘 쿠폰은 이미 받았어요)';
     msg+=added?` · 도감에 ${f.name} 기록!`:' · 이미 도감에 있는 냠몬이에요';
     fight=null;page='coupon';toast(msg);
    }else if(fight.turn===3){fight=null;toast(`${B.n}이(가) 버텼어요. 2턴에 스킬을 쓰거나, 약점 속성을 키워서 다시 도전!`);}
@@ -1269,6 +1284,7 @@ async function visitCounter(){
  }catch(e){foot.hidden=true;}
 }
 visitCounter();
+setInterval(()=>{if((page==='coupon'||page==='home')&&!shareOpen&&tut==null&&bossView==null)render();},60000);
 </script>
 </body>
 </html>
