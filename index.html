@@ -608,7 +608,28 @@ const SITU=[
  {id:'boknal',e:'🐔',n:'초복',t:3,line:'복날엔 삼계탕! 삼계탕 주문 시 복날 삼계몬 등장',ev:true},
  {id:'xmas',e:'🎄',n:'크리스마스',t:5,mult:3,line:'크리스마스엔 치킨! 야식 메뉴 3배',ev:true},
  {id:'busan',e:'📍',n:'부산 여행 중',t:1,line:'부산에선 돼지국밥! 주문 시 부산 국밥몬 등장',ev:true}];
-const situ=()=>SITU.find(x=>x.id===state.situ)||SITU[0];
+/* ---------- v14: 실제 시각 · 날짜 · 날씨 반영 ----------
+   위치는 경기대 수원캠퍼스 기준 (아래 PLACE만 바꾸면 돼요). 날씨: Open-Meteo 무료 API */
+const PLACE={name:'수원',lat:37.30,lon:127.03};
+const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const realWeekday=()=>(new Date().getDay()+6)%7;
+const hhmm=()=>{const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;};
+const wxFresh=()=>{const w=state.weather;return !!(w&&w.date===ymd(new Date()));};
+const wxDesc=c=>c===0?['☀️','맑음']:c<=2?['🌤️','구름 조금']:c===3?['☁️','흐림']:c<=48?['🌫️','안개']:c<=67?['🌧️','비']:c<=77?['🌨️','눈']:c<=82?['🌦️','소나기']:c<=86?['🌨️','눈']:['⛈️','뇌우'];
+function dayText(){return `${state.dayNo}일차 · ${DAYS[state.day]}요일 · 🕐 ${hhmm()}`;}
+function canRender(){return tut==null&&!shareOpen&&bossView==null&&fight==null&&detail==null&&storeSel==null&&!redirect;}
+function autoSitu(){
+ const d=new Date(),m=d.getMonth()+1,dd=d.getDate(),h=d.getHours(),w=wxFresh()?state.weather:null;
+ if(m===12&&dd===25)return 'xmas';
+ if(w&&w.wet)return 'rain';
+ if(w&&w.min<=-5)return 'cold';
+ if(w&&w.max>=30)return 'hot';
+ if(d.getDay()===5||dd===25)return 'payday';
+ if(h>=22||h<4)return 'night';
+ if(w&&w.code<=1&&w.pm10!=null&&w.pm10<=30)return 'fine';
+ return 'clear';
+}
+const situ=()=>{const b=SITU.find(x=>x.id===state.situ)||SITU[0];if(state.situManual||!wxFresh())return b;const w=state.weather;const n={cold:`한파 · 최저 ${w.min}도`,hot:`폭염 · 최고 ${w.max}도`,rain:`${w.code>=71&&w.code<=86?'눈':'비'} 오는 날 · ${w.temp}도`,fine:'맑음 · 미세먼지 좋음'}[b.id];return n?{...b,n}:b;};
 const situMult=()=>situ().mult||2;
 const menuVisible=i=>!EVENT_MENU[i]||EVENT_MENU[i]===state.situ;
 const todayBoss=()=>{const t=situ().t;return t==null?Math.floor((state.dayNo-1)/7)%6:BOSSES.findIndex(B=>B.weak===t);};
@@ -797,7 +818,7 @@ const b=(label,act,val='',attrs='')=>`<button data-act="${act}" data-val="${val}
 
 function render(){
  sprites={};seq=0;
- document.querySelector('#dayLabel').textContent=`${state.dayNo}일차 · ${DAYS[state.day]}요일`;
+ document.querySelector('#dayLabel').textContent=dayText();
  nav.innerHTML=TABS.map(([id,ic,l])=>`<button data-act="tab" data-val="${id}" aria-pressed="${page===id}"${tut!=null&&TUT[tut].tab===id?' class="coach"':''}><span aria-hidden="true">${ic}</span>${l}</button>`).join('');
  view.innerHTML=state.stage===0&&page!=='home'&&page!=='hub'?`<section class="hero"><p>먼저 냠몬 탭에서 알을 부화시켜 주세요.</p>${b('냠몬 탭으로','tab','home','class="primary"')}</section>`:({home,menu,boss,dex,coupon,hub})[page]();
  const oc=sheet.querySelector('.dexcard'),om=oc&&oc.dataset.m,ot=oc?oc.scrollTop:0;
@@ -812,6 +833,7 @@ function dayChips(){
  const c=[];
  c.push(isWeekend()?'<span class="chip hot">주말 · 꿀맛젤리 데이</span>':isFriday()?'<span class="chip hot">불금 보너스 · 성장 +10</span>':'<span class="chip">평일 · 밥심젤리 데이</span>');
  {const S=situ();c.push(S.t!=null?`<span class="chip rain">${S.e} ${S.n} · ${T[S.t].e} ${T[S.t].n} ${situMult()}배</span>`:`<span class="chip">${S.e} ${S.n}</span>`);}
+ if(wxFresh()&&!state.situManual){const w=state.weather,[ic,ds]=wxDesc(w.code);c.push(`<span class="chip">${ic} ${PLACE.name} ${w.temp}도 ${ds}</span>`);}
  return `<div class="chips">${c.join('')}</div>`;
 }
 
@@ -847,6 +869,7 @@ function home(){
   <div class="row">${b(`${situ().e} 상황 바꾸기 ▶`,'situ')}<small>지금: ${situ().n}${situ().t!=null?` · ${T[situ().t].e} ${situMult()}배`:''}</small></div>
   <div class="row">${b('도감 +5 채우기','dexfill')}${b('📖 도감 한번에 채우기','dexfillall','',Object.keys(state.dex).length>=DEX.length?'disabled':'')}${b(resetArm?'정말 초기화할까요?':'처음부터 다시','reset','',resetArm?'class="warm"':'')}</div>
   <div class="row">${b('👾 보스 도감 채우기','bossfill')}${b('❓ 사용법 다시 보기','tutreplay')}</div>
+  <div class="row">${b(state.situManual?'🕐 실제 시간·날씨로 돌아가기':'🕐 실제 시간·날씨 반영 중','realtime','',state.situManual?'':'disabled')}</div>
  </div></details></section>`;
 }
 
@@ -1233,10 +1256,11 @@ document.addEventListener('click',e=>{
    if(!sum(state.xp))addXp(Math.floor(Math.random()*MENUS.length),3);
    if(state.stage===2){const o=order6();if(!state.xp[o[1]]){const others=[0,1,2,3,4,5].filter(t=>t!==o[0]);state.xp[others[Math.floor(Math.random()*5)]]+=1.5;}}
    state.growth=100;evolve();break;}
-  case 'nextday':{state.day=(state.day+1)%7;state.dayNo++;state.daily=freshDaily();pickResult=null;const rot=['clear','cold','rain','fine','hot','night'];state.situ=state.day===4?'payday':rot[state.dayNo%rot.length];toast(`${state.dayNo}일차 ${DAYS[state.day]}요일 · 오늘은 ${situ().e} ${situ().n}`);break;}
-  case 'situ':{const k=SITU.findIndex(x=>x.id===state.situ);state.situ=SITU[(k+1)%SITU.length].id;state.daily.situTold=false;if(storeMenu!=null&&!menuVisible(storeMenu))storeMenu=null;toast(`${situ().e} ${situ().n} · ${situ().line}`);break;}
+  case 'nextday':{state.situManual=true;state.day=(state.day+1)%7;state.dayNo++;state.daily=freshDaily();pickResult=null;const rot=['clear','cold','rain','fine','hot','night'];state.situ=state.day===4?'payday':rot[state.dayNo%rot.length];toast(`${state.dayNo}일차 ${DAYS[state.day]}요일 · 오늘은 ${situ().e} ${situ().n}`);break;}
+  case 'situ':{state.situManual=true;const k=SITU.findIndex(x=>x.id===state.situ);state.situ=SITU[(k+1)%SITU.length].id;state.daily.situTold=false;if(storeMenu!=null&&!menuVisible(storeMenu))storeMenu=null;toast(`${situ().e} ${situ().n} · ${situ().line}`);break;}
   case 'dexview':dexView=val;break;
   case 'dexclose':dexView=null;break;
+  case 'realtime':state.situManual=false;state.day=realWeekday();state.daily.situTold=false;applyAuto();toast(`실제 시간·날씨로 돌아왔어요 · ${situ().e} ${situ().n}`);break;
   case 'dextab':dexTab=val;break;
   case 'bossview':bossView=i;break;
   case 'bossclose':bossView=null;break;
@@ -1284,6 +1308,33 @@ async function visitCounter(){
  }catch(e){foot.hidden=true;}
 }
 visitCounter();
+
+function applyAuto(){if(state.situManual)return false;const s=autoSitu();if(s!==state.situ){state.situ=s;state.daily.situTold=false;return true;}return false;}
+function realTick(){
+ const today=ymd(new Date());let changed=false,newDay=false;
+ if(state.realDate!==today){
+  if(state.realDate){const diff=Math.max(1,Math.round((Date.parse(today)-Date.parse(state.realDate))/864e5));state.dayNo+=diff;state.daily=freshDaily();pickResult=null;state.situManual=false;newDay=true;}
+  state.realDate=today;state.day=realWeekday();changed=true;
+ }
+ if(applyAuto())changed=true;
+ const dl=document.querySelector('#dayLabel');if(dl)dl.textContent=dayText();
+ if(changed){save();if(canRender()||newDay)render();if(newDay)toast(`새로운 하루! ${state.dayNo}일차 ${DAYS[state.day]}요일 · 오늘은 ${situ().e} ${situ().n}`);}
+}
+async function fetchWeather(force){
+ const w=state.weather;if(!force&&w&&w.date===ymd(new Date())&&Date.now()-w.at<30*60e3)return;
+ try{
+  const q=`latitude=${PLACE.lat}&longitude=${PLACE.lon}&timezone=Asia%2FSeoul`;
+  const r=await fetch(`https://api.open-meteo.com/v1/forecast?${q}&current=temperature_2m,weather_code,precipitation&daily=temperature_2m_max,temperature_2m_min&forecast_days=1`).then(x=>{if(!x.ok)throw new Error(x.status);return x.json();});
+  let pm10=null;try{const a=await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=pm10`).then(x=>x.json());if(a.current&&a.current.pm10!=null)pm10=Math.round(a.current.pm10);}catch(e){}
+  const code=r.current.weather_code;
+  state.weather={at:Date.now(),date:ymd(new Date()),temp:Math.round(r.current.temperature_2m),min:Math.round(r.daily.temperature_2m_min[0]),max:Math.round(r.daily.temperature_2m_max[0]),code,wet:(code>=51&&code<=67)||(code>=71&&code<=86)||code>=95||r.current.precipitation>0,pm10};
+  applyAuto();save();if(canRender())render();
+ }catch(e){}
+}
+realTick();fetchWeather();
+setInterval(realTick,20000);
+setInterval(()=>fetchWeather(),10*60e3);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){realTick();fetchWeather();}});
 setInterval(()=>{if((page==='coupon'||page==='home')&&!shareOpen&&tut==null&&bossView==null)render();},60000);
 </script>
 </body>
