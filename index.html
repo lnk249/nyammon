@@ -1075,8 +1075,7 @@ function bossModal(){
 /* ---------- v11: 인터페이스 모음 (링크는 여기서만 바꾸면 돼요) ---------- */
 const LINKS=[
  {no:1,t:'냠몬 키우기',d:'먹는 대로 진화하는 캐릭터 · 지금 보고 있는 화면이에요.',self:true},
- {no:2,t:'인터페이스 2',d:'준비 중이에요. 지금은 임시로 배달의민족 웹사이트로 연결돼요.',url:'https://www.baemin.com'},
- {no:3,t:'인터페이스 3',d:'준비 중이에요. 지금은 임시로 경기대학교 LMS로 연결돼요.',url:'https://lms.kyonggi.ac.kr'}];
+ {no:2,t:'냠런',d:'팀의 다른 인터페이스예요. 새 창으로 열려요.',url:'https://nyamrun.netlify.app'}];
 function hub(){
  return `<section><h1>인터페이스 모음</h1><p class="sub" style="margin:0">팀 프로젝트에서 만든 인터페이스를 한곳에 모았어요. 버튼을 누르면 이동해요.</p></section>
  ${LINKS.map(L=>`<section class="hubcard"><span class="hubno">${L.no}</span><div class="grow"><h2 style="margin:0 0 4px">${L.t}${L.self?' <span class="badge">지금 여기</span>':''}</h2><p class="sub" style="margin:0 0 12px">${L.d}</p>${L.self?b('냠몬으로 돌아가기','tab','home','class="primary wide"'):`<a class="btn wide" href="${L.url}" target="_blank" rel="noopener noreferrer">${L.t} 열기 ↗</a>`}</div></section>`).join('')}
